@@ -230,7 +230,7 @@ function BookingForm() {
 
         {errorMessage ? <p className="mt-4 rounded-md bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{errorMessage}</p> : null}
 
-        {debugStatus ? (
+        {import.meta.env.DEV && debugStatus ? (
           <div className="mt-4 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-xs text-slate-200">
             <p className="font-semibold text-slate-100">Debug Submission Status</p>
             <p className="mt-1">Firestore: {debugStatus.firestore}</p>

@@ -5,6 +5,7 @@
 @import 'tailwindcss/utilities';
 
 :root {
+  --accent-color: #f59e0b;
   font-family: 'Public Sans', sans-serif;
   color: #e2e8f0;
   background-color: #0f172a;
@@ -68,18 +69,23 @@ h6 {
 }
 
 .btn-primary {
-  border: 1px solid #f59e0b;
-  background: #f59e0b;
+  border: 1px solid var(--accent-color);
+  background: var(--accent-color);
   color: #111827;
   border-radius: 0.5rem;
   padding: 0.62rem 1.4rem;
   font-size: 0.9rem;
   font-weight: 600;
-  transition: background-color 0.2s ease;
+  transition: filter 0.2s ease;
 }
 
 .btn-primary:hover {
-  background: #fbbf24;
+  filter: brightness(1.06);
+}
+
+.day-selected {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 14%, #0f172a);
 }
 
 .btn-secondary {
