@@ -140,10 +140,10 @@ function BookingForm() {
         <div className="grid gap-4 md:grid-cols-2">
           <Field
             id="name"
-            label="Name"
+            label="Name *"
             value={formData.name}
             onChange={(e) => updateField('name', e.target.value)}
-            placeholder="John Doe"
+            placeholder="Your full name"
             error={errors.name}
             required
           />
@@ -158,19 +158,19 @@ function BookingForm() {
           <Field
             id="email"
             type="email"
-            label="Email Address"
+            label="Email Address *"
             value={formData.email}
             onChange={(e) => updateField('email', e.target.value)}
-            placeholder="name@company.com"
+            placeholder="your email address"
             error={errors.email}
             required
           />
           <Field
             id="phone"
-            label="Phone Number"
+            label="Phone Number *"
             value={formData.phone}
             onChange={(e) => updateField('phone', e.target.value)}
-            placeholder="+234 800 000 0000"
+            placeholder="+63 912 345 ****"
             error={errors.phone}
             required
           />
@@ -183,10 +183,10 @@ function BookingForm() {
             placeholder="Select industry"
             error={errors.industry}
           />
-          <Field
+          <Field  
             id="preferredSchedule"
             type="datetime-local"
-            label="Preferred Schedule"
+            label="Preferred Schedule *"
             value={formData.preferredSchedule}
             min={minDateTime}
             onChange={(e) => updateField('preferredSchedule', e.target.value)}
