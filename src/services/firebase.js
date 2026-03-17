@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -34,6 +35,24 @@ export async function getBookings() {
 
   const snapshot = await getDocs(bookingsQuery)
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+}
+
+export function subscribeToBookings(onData, onError) {
+  const bookingsQuery = query(
+    collection(db, BOOKINGS_COLLECTION),
+    orderBy('createdAt', 'desc'),
+  )
+
+  return onSnapshot(
+    bookingsQuery,
+    (snapshot) => {
+      const rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      onData(rows)
+    },
+    (error) => {
+      if (onError) onError(error)
+    },
+  )
 }
 
 export async function getAppSettings() {

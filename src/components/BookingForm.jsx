@@ -31,7 +31,6 @@ function BookingForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [debugStatus, setDebugStatus] = useState(null)
 
   const minDateTime = useMemo(() => {
     const now = new Date()
@@ -74,19 +73,11 @@ function BookingForm() {
     setErrors({})
     setSuccessMessage('')
     setErrorMessage('')
-    setDebugStatus(null)
   }
 
   const handleSubmit = async (submissionData) => {
     setSuccessMessage('')
     setErrorMessage('')
-    setDebugStatus({
-      firestore: 'pending',
-      googleSheets: 'pending',
-      firestoreError: null,
-      googleSheetsError: null,
-      attemptedAt: new Date().toISOString(),
-    })
 
     setIsSubmitting(true)
 
@@ -118,14 +109,6 @@ function BookingForm() {
         sheetsErrorMessage = sheetsError?.message || 'Google Sheets request failed'
         console.error('Google Sheets submit failed:', sheetsError)
       }
-
-      setDebugStatus({
-        firestore: firestoreSuccess ? 'success' : 'failed',
-        googleSheets: sheetsSuccess ? 'success' : 'failed',
-        firestoreError: firestoreErrorMessage,
-        googleSheetsError: sheetsErrorMessage,
-        attemptedAt: new Date().toISOString(),
-      })
 
       if (firestoreSuccess || sheetsSuccess) {
         setSuccessMessage('Booking submitted successfully!')
@@ -229,17 +212,6 @@ function BookingForm() {
         {successMessage ? <p className="mt-4 rounded-md bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{successMessage}</p> : null}
 
         {errorMessage ? <p className="mt-4 rounded-md bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{errorMessage}</p> : null}
-
-        {import.meta.env.DEV && debugStatus ? (
-          <div className="mt-4 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-xs text-slate-200">
-            <p className="font-semibold text-slate-100">Debug Submission Status</p>
-            <p className="mt-1">Firestore: {debugStatus.firestore}</p>
-            <p>Google Sheets: {debugStatus.googleSheets}</p>
-            {debugStatus.firestoreError ? <p className="mt-1 text-rose-300">Firestore Error: {debugStatus.firestoreError}</p> : null}
-            {debugStatus.googleSheetsError ? <p className="text-rose-300">Google Sheets Error: {debugStatus.googleSheetsError}</p> : null}
-            <p className="mt-1 text-slate-400">Attempted: {new Date(debugStatus.attemptedAt).toLocaleString()}</p>
-          </div>
-        ) : null}
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button type="button" onClick={handleCancel} className="btn-secondary">

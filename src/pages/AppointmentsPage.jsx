@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getBookings } from '../services/firebase'
+import { subscribeToBookings } from '../services/firebase'
 import { useAppSettings } from '../context/AppSettingsContext'
 import * as XLSX from 'xlsx'
 import {
@@ -32,7 +32,9 @@ function AppointmentsPage() {
   const [selectedDay, setSelectedDay] = useState(() => formatDateOnly(new Date()))
   const [searchTerm, setSearchTerm] = useState('')
   const [companyFilter, setCompanyFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [selectedAppointment, setSelectedAppointment] = useState(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const validPin = settings.appointmentsPin || import.meta.env.VITE_APPOINTMENTS_PIN || '1234'
 
@@ -50,29 +52,31 @@ function AppointmentsPage() {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    let mounted = true
+    setIsLoading(true)
+    setLoadError('')
 
-    const loadBookings = async () => {
-      setIsLoading(true)
-      setLoadError('')
-
-      try {
-        const data = await getBookings()
-        if (!mounted) return
+    const unsubscribe = subscribeToBookings(
+      (data) => {
         setBookings(data)
-      } catch (error) {
-        if (!mounted) return
+        setIsLoading(false)
+      },
+      (error) => {
         setLoadError(error.message || 'Failed to load bookings')
-      } finally {
-        if (mounted) setIsLoading(false)
-      }
-    }
+        setIsLoading(false)
+      },
+    )
 
-    loadBookings()
+    return () => unsubscribe()
+  }, [isAuthenticated])
 
-    return () => {
-      mounted = false
-    }
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const timer = setInterval(() => {
+      setNowMs(Date.now())
+    }, 30000)
+
+    return () => clearInterval(timer)
   }, [isAuthenticated])
 
   const normalizedBookings = useMemo(() => {
@@ -122,7 +126,7 @@ function AppointmentsPage() {
     }, {})
   }, [normalizedBookings])
 
-  const filteredBookings = useMemo(() => {
+  const baseFilteredBookings = useMemo(() => {
     return normalizedBookings
       .filter((item) => {
         if (!selectedDay) return true
@@ -152,6 +156,26 @@ function AppointmentsPage() {
       })
   }, [normalizedBookings, selectedDay, companyFilter, searchTerm])
 
+  const filteredBookings = useMemo(() => {
+    return baseFilteredBookings.filter((item) => {
+      if (statusFilter === 'all') return true
+      return getAppointmentStatus(item, nowMs) === statusFilter
+    })
+  }, [baseFilteredBookings, statusFilter, nowMs])
+
+  const statusCounts = useMemo(() => {
+    return baseFilteredBookings.reduce(
+      (acc, item) => {
+        const status = getAppointmentStatus(item, nowMs)
+        if (status === 'completed') acc.completed += 1
+        else acc.pending += 1
+        acc.all += 1
+        return acc
+      },
+      { all: 0, pending: 0, completed: 0 },
+    )
+  }, [baseFilteredBookings, nowMs])
+
   const companyOptions = useMemo(() => {
     const companies = Array.from(
       new Set(normalizedBookings.map((item) => (item.company || '').trim()).filter(Boolean)),
@@ -168,6 +192,7 @@ function AppointmentsPage() {
     const rows = filteredBookings.map((item) => ({
       Name: item.name || '-',
       Company: item.company || '-',
+      Status: getAppointmentStatus(item, nowMs),
       Email: item.email || '-',
       Phone: item.phone || '-',
       Industry: item.industry || '-',
@@ -217,41 +242,41 @@ function AppointmentsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="mb-7 rounded-2xl border border-slate-800 bg-slate-900/55 p-5 shadow-[0_0_0_1px_rgba(30,41,59,0.2),0_10px_30px_rgba(2,6,23,0.35)] sm:p-6">
+      <div className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/55 p-4 shadow-[0_0_0_1px_rgba(30,41,59,0.2),0_10px_30px_rgba(2,6,23,0.35)] sm:mb-7 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              <h1 className="text-xl font-semibold tracking-tight text-white sm:text-3xl">
                 Appointments Dashboard
               </h1>
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-xs leading-relaxed text-slate-400 sm:text-sm">
                 Track schedules, monitor daily volume, and review booking details.
               </p>
             </div>
 
             <a
               href="/"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/70 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800 sm:w-auto"
             >
               <FaArrowLeft className="text-xs" />
               Back to Booking Page
             </a>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:mt-5 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Total Appointments</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{normalizedBookings.length}</p>
+              <p className="mt-1 text-xl font-semibold text-white sm:text-2xl">{normalizedBookings.length}</p>
             </div>
             <div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-indigo-200">Selected Date</p>
-              <p className="mt-1 text-base font-semibold text-indigo-100">
+              <p className="mt-1 text-sm font-semibold text-indigo-100 sm:text-base">
                 {selectedDay ? formatReadableDate(selectedDay) : 'All dates'}
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Visible Rows</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{filteredBookings.length}</p>
+              <p className="mt-1 text-xl font-semibold text-white sm:text-2xl">{filteredBookings.length}</p>
             </div>
           </div>
         </div>
@@ -271,17 +296,17 @@ function AppointmentsPage() {
         ) : null}
         {isLoading ? <p className="mb-4 text-sm text-slate-300">Loading appointments...</p> : null}
 
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_1.95fr]">
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5 shadow-[0_10px_25px_rgba(2,6,23,0.3)]">
+        <div className="grid gap-5 lg:grid-cols-[1.05fr_1.95fr] lg:gap-6">
+          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/55 p-3 shadow-[0_10px_25px_rgba(2,6,23,0.3)] sm:p-5">
             <div className="mb-5 flex items-center justify-between">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-slate-300">
+              <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-300 sm:text-sm">
                 <FaCalendarDays />
                 Calendar
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+                  className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 sm:min-h-0 sm:px-3"
                   onClick={() =>
                     setMonthCursor(
                       (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
@@ -293,7 +318,7 @@ function AppointmentsPage() {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+                  className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 sm:min-h-0 sm:px-3"
                   onClick={() =>
                     setMonthCursor(
                       (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
@@ -313,7 +338,7 @@ function AppointmentsPage() {
               })}
             </p>
 
-            <div className="grid grid-cols-7 gap-2 text-center text-[11px] text-slate-400">
+            <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] text-slate-400 sm:gap-2 sm:text-[11px]">
               {DAYS.map((day) => (
                 <p key={day} className="py-1 font-semibold uppercase tracking-wide">
                   {day}
@@ -322,7 +347,7 @@ function AppointmentsPage() {
 
               {monthGrid.map((cell, index) => {
                 if (!cell) {
-                  return <div key={`empty-${index}`} className="h-14 rounded-lg border border-transparent" />
+                  return <div key={`empty-${index}`} className="h-12 rounded-lg border border-transparent sm:h-14" />
                 }
 
                 const key = formatDateOnly(cell)
@@ -335,7 +360,7 @@ function AppointmentsPage() {
                     key={key}
                     type="button"
                     onClick={() => setSelectedDay(key)}
-                    className={`relative h-14 rounded-lg border px-2 py-1 text-left transition-all duration-200 ${
+                    className={`relative h-12 rounded-lg border px-1.5 py-1 text-left transition-all duration-200 sm:h-14 sm:px-2 ${
                       isSelected
                         ? 'border-indigo-400 bg-indigo-500/25 shadow-[0_0_0_1px_rgba(99,102,241,0.45)]'
                         : hasAppointment
@@ -343,16 +368,16 @@ function AppointmentsPage() {
                           : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'
                     }`}
                   >
-                    <p className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                    <p className={`text-[11px] font-semibold sm:text-xs ${isSelected ? 'text-white' : 'text-slate-200'}`}>
                       {cell.getDate()}
                     </p>
                     <span
-                      className={`absolute bottom-1.5 right-1.5 h-2.5 w-2.5 rounded-full ${
+                      className={`absolute bottom-1 right-1 h-2 w-2 rounded-full sm:bottom-1.5 sm:right-1.5 sm:h-2.5 sm:w-2.5 ${
                         hasAppointment ? 'bg-indigo-300' : 'bg-slate-600'
                       }`}
                     />
                     {hasAppointment ? (
-                      <span className="absolute right-1.5 top-1 rounded-full bg-indigo-500/30 px-1.5 py-[1px] text-[10px] font-semibold text-indigo-100">
+                      <span className="absolute right-1 top-1 rounded-full bg-indigo-500/30 px-1 py-[1px] text-[9px] font-semibold text-indigo-100 sm:right-1.5 sm:px-1.5 sm:text-[10px]">
                         {count}
                       </span>
                     ) : null}
@@ -373,13 +398,13 @@ function AppointmentsPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5 shadow-[0_10px_25px_rgba(2,6,23,0.3)]">
+          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/55 p-3 shadow-[0_10px_25px_rgba(2,6,23,0.3)] sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-white">Appointments Table</h2>
-              <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-white sm:text-xl">Appointments Table</h2>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:flex-none"
                   onClick={handleExportExcel}
                   disabled={filteredBookings.length === 0}
                 >
@@ -389,7 +414,7 @@ function AppointmentsPage() {
 
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-500/60 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 transition hover:border-indigo-400 hover:bg-indigo-500/20"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-indigo-500/60 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 transition hover:border-indigo-400 hover:bg-indigo-500/20 sm:min-h-0 sm:flex-none"
                   onClick={() => setSelectedDay('')}
                 >
                   <FaUsers className="text-xs" />
@@ -430,12 +455,99 @@ function AppointmentsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full min-w-[860px] border-collapse">
+            <div className="mb-4 flex flex-wrap gap-2">
+              {[
+                { key: 'all', label: `All (${statusCounts.all})` },
+                { key: 'pending', label: `Pending (${statusCounts.pending})` },
+                { key: 'completed', label: `Completed (${statusCounts.completed})` },
+              ].map((option) => {
+                const isActive = statusFilter === option.key
+
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setStatusFilter(option.key)}
+                    className={`inline-flex min-h-11 items-center rounded-lg border px-3 py-2 text-sm font-semibold transition sm:min-h-0 ${
+                      isActive
+                        ? 'border-amber-400 bg-amber-400 text-slate-900'
+                        : 'border-amber-500/60 bg-amber-500/10 text-amber-100 hover:border-amber-400 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="space-y-3 md:hidden">
+              {filteredBookings.length === 0 ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-10 text-center">
+                  <p className="text-base font-semibold text-slate-200">No appointments found</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Try another date, clear filters, or search using a different keyword.
+                  </p>
+                </div>
+              ) : (
+                filteredBookings.map((item) => (
+                  <button
+                    key={`mobile-${item.id}`}
+                    type="button"
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-left transition hover:border-slate-600"
+                    onClick={() => setSelectedAppointment(item)}
+                  >
+                    <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Name</p>
+                    <p className="text-sm font-semibold text-white">{item.name || '-'}</p>
+
+                    <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Company</p>
+                        <p className="text-slate-200">{item.company || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Status</p>
+                        <p className="text-slate-200">{toStatusLabel(getAppointmentStatus(item, nowMs))}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Date & Time</p>
+                        <p className="font-medium text-indigo-200">{formatDateTime(item.appointmentDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Email</p>
+                        <p className="truncate text-slate-200">{item.email || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Phone</p>
+                        <p className="text-slate-200">{item.phone || '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Message</p>
+                      <p className="truncate text-sm text-slate-300">{item.message || '-'}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-xl border border-slate-800 md:block">
+              <table className="w-full min-w-[980px] table-fixed border-collapse">
+                <colgroup>
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '17%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-950/80 text-left text-[11px] uppercase tracking-[0.12em] text-slate-400">
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Company</th>
+                    <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Industry</th>
@@ -446,7 +558,7 @@ function AppointmentsPage() {
                 <tbody>
                   {filteredBookings.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-4 py-12 text-center">
+                      <td colSpan="8" className="px-4 py-12 text-center">
                         <div className="mx-auto max-w-sm space-y-2">
                           <p className="text-base font-semibold text-slate-200">No appointments found</p>
                           <p className="text-sm text-slate-400">
@@ -474,9 +586,26 @@ function AppointmentsPage() {
                       >
                         <td className="px-4 py-3 font-semibold text-white">{item.name || '-'}</td>
                         <td className="px-4 py-3">{item.company || '-'}</td>
-                        <td className="px-4 py-3 text-slate-300">{item.email || '-'}</td>
-                        <td className="px-4 py-3">{item.phone || '-'}</td>
-                        <td className="px-4 py-3 text-slate-300">{item.industry || '-'}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                              getAppointmentStatus(item, nowMs) === 'completed'
+                                ? 'bg-emerald-500/20 text-emerald-200'
+                                : 'bg-amber-500/20 text-amber-200'
+                            }`}
+                          >
+                            {toStatusLabel(getAppointmentStatus(item, nowMs))}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300" title={item.email || '-'}>
+                          <span className="block truncate">{item.email || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3" title={item.phone || '-'}>
+                          <span className="block truncate">{item.phone || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300" title={item.industry || '-'}>
+                          <span className="block truncate">{item.industry || '-'}</span>
+                        </td>
                         <td className="px-4 py-3 font-medium text-indigo-200">
                           {formatDateTime(item.appointmentDate)}
                         </td>
@@ -519,6 +648,7 @@ function AppointmentsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailItem label="Name" value={selectedAppointment.name} emphasis />
                 <DetailItem label="Company" value={selectedAppointment.company} />
+                <DetailItem label="Status" value={toStatusLabel(getAppointmentStatus(selectedAppointment, nowMs))} emphasis />
                 <DetailItem label="Email" value={selectedAppointment.email} />
                 <DetailItem label="Phone" value={selectedAppointment.phone} />
                 <DetailItem label="Industry" value={selectedAppointment.industry} />
@@ -601,6 +731,29 @@ function formatDateTime(date) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function getAppointmentStatus(item, nowMs = Date.now()) {
+  const statusRaw = (item?.status || '').toString().trim().toLowerCase()
+
+  if (['completed', 'complete', 'done', 'finished'].includes(statusRaw)) {
+    return 'completed'
+  }
+
+  if (['pending', 'open', 'scheduled', 'in-progress', 'in progress'].includes(statusRaw)) {
+    return 'pending'
+  }
+
+  if (item?.appointmentDate instanceof Date && !Number.isNaN(item.appointmentDate.getTime())) {
+    return item.appointmentDate.getTime() < nowMs ? 'completed' : 'pending'
+  }
+
+  return 'pending'
+}
+
+function toStatusLabel(status) {
+  if (status === 'completed') return 'Completed'
+  return 'Pending'
 }
 
 export default AppointmentsPage
