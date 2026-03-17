@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
+import { sendToGoogleSheets } from '../services/api'
+import { addBooking } from '../services/firebase'
 
-const tierOptions = ['Starter', 'Business', 'Custom']
-const moduleOptions = ['Accounting', 'Human Resources', 'Inventory', 'Fleet']
-const companySizes = ['1-5', '6-50', '51-200', '200+']
 const industries = [
   'Technology',
   'Finance',
@@ -21,11 +20,8 @@ const initialFormState = {
   company: '',
   email: '',
   phone: '',
-  tier: 'Business',
-  modules: [],
-  companySize: '',
   industry: '',
-  demoDate: '',
+  preferredSchedule: '',
   message: '',
 }
 
@@ -35,16 +31,19 @@ function BookingForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [debugStatus, setDebugStatus] = useState(null)
 
-  const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL
-
-  const minDate = useMemo(() => new Date().toISOString().split('T')[0], [])
+  const minDateTime = useMemo(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
+  }, [])
 
   const validate = () => {
     const nextErrors = {}
 
     if (!formData.name.trim()) nextErrors.name = 'Name is required.'
-    if (!formData.company.trim()) nextErrors.company = 'Company is required.'
+
     if (!formData.email.trim()) {
       nextErrors.email = 'Email address is required.'
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -57,10 +56,9 @@ function BookingForm() {
       nextErrors.phone = 'Enter a valid phone number.'
     }
 
-    if (!formData.tier) nextErrors.tier = 'Please select a tier.'
-    if (!formData.companySize) nextErrors.companySize = 'Please select company size.'
-    if (!formData.industry) nextErrors.industry = 'Please select an industry.'
-    if (!formData.demoDate) nextErrors.demoDate = 'Please select a demo date.'
+    if (!formData.preferredSchedule) {
+      nextErrors.preferredSchedule = 'Please choose your preferred schedule.'
+    }
 
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -71,77 +69,92 @@ function BookingForm() {
     setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 
-  const toggleModule = (moduleName) => {
-    setFormData((prev) => {
-      const hasModule = prev.modules.includes(moduleName)
-      const nextModules = hasModule
-        ? prev.modules.filter((item) => item !== moduleName)
-        : [...prev.modules, moduleName]
-
-      return { ...prev, modules: nextModules }
-    })
-  }
-
   const handleCancel = () => {
     setFormData(initialFormState)
     setErrors({})
     setSuccessMessage('')
     setErrorMessage('')
+    setDebugStatus(null)
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const handleSubmit = async (submissionData) => {
     setSuccessMessage('')
     setErrorMessage('')
-
-    if (!validate()) return
-
-    if (!scriptUrl) {
-      setErrorMessage('Google Sheets endpoint is missing. Set VITE_GOOGLE_SCRIPT_URL in your .env file.')
-      return
-    }
+    setDebugStatus({
+      firestore: 'pending',
+      googleSheets: 'pending',
+      firestoreError: null,
+      googleSheetsError: null,
+      attemptedAt: new Date().toISOString(),
+    })
 
     setIsSubmitting(true)
 
+    let firestoreSuccess = false
+    let sheetsSuccess = false
+    let firestoreErrorMessage = null
+    let sheetsErrorMessage = null
+
     try {
       const payload = {
-        ...formData,
-        modules: formData.modules.join(', '),
+        ...submissionData,
+        dateAndTime: submissionData.preferredSchedule,
         submittedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
 
-      const response = await fetch(scriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      try {
+        await addBooking(payload)
+        firestoreSuccess = true
+      } catch (firestoreError) {
+        firestoreErrorMessage = firestoreError?.message || 'Firestore write failed'
+        console.error('Firestore save failed:', firestoreError)
+      }
+
+      try {
+        await sendToGoogleSheets(payload)
+        sheetsSuccess = true
+      } catch (sheetsError) {
+        sheetsErrorMessage = sheetsError?.message || 'Google Sheets request failed'
+        console.error('Google Sheets submit failed:', sheetsError)
+      }
+
+      setDebugStatus({
+        firestore: firestoreSuccess ? 'success' : 'failed',
+        googleSheets: sheetsSuccess ? 'success' : 'failed',
+        firestoreError: firestoreErrorMessage,
+        googleSheetsError: sheetsErrorMessage,
+        attemptedAt: new Date().toISOString(),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to submit booking request.')
+      if (firestoreSuccess || sheetsSuccess) {
+        setSuccessMessage('Booking submitted successfully!')
+        setFormData(initialFormState)
+      } else {
+        setErrorMessage('Something went wrong')
       }
-
-      setSuccessMessage('Your booking has been submitted!')
-      setFormData(initialFormState)
-    } catch (error) {
-      setErrorMessage(error.message || 'Submission failed. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const onSubmit = async (event) => {
+    event.preventDefault()
+    if (!validate()) return
+    await handleSubmit(formData)
+  }
+
   return (
-    <section id="booking" className="fade-up fade-delay-1 scroll-mt-24 py-16">
-      <div className="mb-8">
+    <section id="booking" className="scroll-mt-24 py-14">
+      <div className="mb-7">
         <h2 className="text-2xl font-semibold text-white md:text-3xl">Book an Appointment</h2>
-        <p className="mt-3 max-w-2xl text-slate-300">
-          Schedule a meeting, request a product demo, or send purchase inquiries directly to our team.
+        <p className="mt-2 max-w-2xl text-slate-300">
+          This appointment form is for general use. Share your preferred schedule and we will contact you.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="glass-panel rounded-2xl p-6 md:p-8">
-        <div className="grid gap-5 md:grid-cols-2">
+      <form onSubmit={onSubmit} className="card-panel rounded-xl p-5 sm:p-7">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field
             id="name"
             label="Name"
@@ -156,9 +169,8 @@ function BookingForm() {
             label="Company"
             value={formData.company}
             onChange={(e) => updateField('company', e.target.value)}
-            placeholder="Klassic Retail"
+            placeholder="Your company name"
             error={errors.company}
-            required
           />
           <Field
             id="email"
@@ -179,77 +191,6 @@ function BookingForm() {
             error={errors.phone}
             required
           />
-        </div>
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <fieldset>
-            <legend className="mb-3 text-sm font-semibold text-slate-100">Tier</legend>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {tierOptions.map((option) => {
-                const isRecommended = option === 'Business'
-                const isSelected = formData.tier === option
-                return (
-                  <label
-                    key={option}
-                    className={`cursor-pointer rounded-xl border px-4 py-3 text-sm transition ${
-                      isSelected
-                        ? 'border-amber-400 bg-amber-500/15 text-amber-300'
-                        : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-amber-400/60'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="tier"
-                      value={option}
-                      checked={isSelected}
-                      onChange={(e) => updateField('tier', e.target.value)}
-                      className="sr-only"
-                    />
-                    <span>{option}</span>
-                    {isRecommended ? (
-                      <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
-                        Recommended
-                      </span>
-                    ) : null}
-                  </label>
-                )
-              })}
-            </div>
-            {errors.tier ? <p className="mt-2 text-xs text-rose-300">{errors.tier}</p> : null}
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-3 text-sm font-semibold text-slate-100">Modules</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {moduleOptions.map((moduleName) => (
-                <label
-                  key={moduleName}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 transition hover:border-amber-400/50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.modules.includes(moduleName)}
-                    onChange={() => toggleModule(moduleName)}
-                    className="h-4 w-4 rounded border-slate-500 text-amber-500 focus:ring-amber-400"
-                  />
-                  {moduleName}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          <SelectField
-            id="companySize"
-            label="Company Size"
-            value={formData.companySize}
-            onChange={(e) => updateField('companySize', e.target.value)}
-            options={companySizes}
-            placeholder="Select company size"
-            error={errors.companySize}
-            required
-          />
           <SelectField
             id="industry"
             label="Industry"
@@ -258,21 +199,20 @@ function BookingForm() {
             options={industries}
             placeholder="Select industry"
             error={errors.industry}
-            required
           />
           <Field
-            id="demoDate"
-            type="date"
-            label="Demo Date"
-            value={formData.demoDate}
-            min={minDate}
-            onChange={(e) => updateField('demoDate', e.target.value)}
-            error={errors.demoDate}
+            id="preferredSchedule"
+            type="datetime-local"
+            label="Preffered Schedule"
+            value={formData.preferredSchedule}
+            min={minDateTime}
+            onChange={(e) => updateField('preferredSchedule', e.target.value)}
+            error={errors.preferredSchedule}
             required
           />
         </div>
 
-        <div className="mt-5">
+        <div className="mt-4">
           <label htmlFor="message" className="mb-2 block text-sm font-semibold text-slate-100">
             Message
           </label>
@@ -281,36 +221,31 @@ function BookingForm() {
             rows="5"
             value={formData.message}
             onChange={(e) => updateField('message', e.target.value)}
-            placeholder="Tell us about your use case, preferred meeting time, or specific product needs..."
-            className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+            placeholder="Write any details that will help us prepare for your appointment."
+            className="field-input"
           />
         </div>
 
-        {successMessage ? (
-          <p className="mt-5 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            {successMessage}
-          </p>
+        {successMessage ? <p className="mt-4 rounded-md bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{successMessage}</p> : null}
+
+        {errorMessage ? <p className="mt-4 rounded-md bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{errorMessage}</p> : null}
+
+        {debugStatus ? (
+          <div className="mt-4 rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-xs text-slate-200">
+            <p className="font-semibold text-slate-100">Debug Submission Status</p>
+            <p className="mt-1">Firestore: {debugStatus.firestore}</p>
+            <p>Google Sheets: {debugStatus.googleSheets}</p>
+            {debugStatus.firestoreError ? <p className="mt-1 text-rose-300">Firestore Error: {debugStatus.firestoreError}</p> : null}
+            {debugStatus.googleSheetsError ? <p className="text-rose-300">Google Sheets Error: {debugStatus.googleSheetsError}</p> : null}
+            <p className="mt-1 text-slate-400">Attempted: {new Date(debugStatus.attemptedAt).toLocaleString()}</p>
+          </div>
         ) : null}
 
-        {errorMessage ? (
-          <p className="mt-5 rounded-lg border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {errorMessage}
-          </p>
-        ) : null}
-
-        <div className="mt-7 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
-          >
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={handleCancel} className="btn-secondary">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <button type="submit" disabled={isSubmitting} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
             {isSubmitting ? 'Submitting...' : 'Submit'}
           </button>
         </div>
@@ -327,51 +262,26 @@ function Field({
   placeholder,
   error,
   type = 'text',
-  required = false,
   min,
 }) {
   return (
     <div>
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-100">
         {label}
-        {required ? <span className="ml-1 text-amber-300">*</span> : null}
       </label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        min={min}
-        className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-amber-400"
-      />
-      {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
+      <input id={id} type={type} value={value} onChange={onChange} placeholder={placeholder} min={min} className="field-input" />
+      {error ? <p className="mt-1 text-xs text-rose-300">{error}</p> : null}
     </div>
   )
 }
 
-function SelectField({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-  placeholder,
-  error,
-  required = false,
-}) {
+function SelectField({ id, label, value, onChange, options, placeholder, error }) {
   return (
     <div>
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-100">
         {label}
-        {required ? <span className="ml-1 text-amber-300">*</span> : null}
       </label>
-      <select
-        id={id}
-        value={value}
-        onChange={onChange}
-        className="w-full rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-amber-400"
-      >
+      <select id={id} value={value} onChange={onChange} className="field-input">
         <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option} value={option}>
@@ -379,7 +289,7 @@ function SelectField({
           </option>
         ))}
       </select>
-      {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
+      {error ? <p className="mt-1 text-xs text-rose-300">{error}</p> : null}
     </div>
   )
 }

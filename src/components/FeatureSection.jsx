@@ -18,7 +18,7 @@ const features = [
 
 function FeatureSection() {
   return (
-    <section className="fade-up fade-delay-2 py-16">
+    <section className="py-14">
       <div className="mb-8">
         <h2 className="text-2xl font-semibold text-white md:text-3xl">Why Teams Choose Klassic</h2>
         <p className="mt-3 max-w-2xl text-slate-300">
@@ -30,9 +30,9 @@ function FeatureSection() {
         {features.map((feature) => (
           <article
             key={feature.title}
-            className="glass-panel rounded-2xl p-6 transition hover:-translate-y-1 hover:border-amber-400/35"
+            className="card-panel rounded-xl p-6 transition hover:border-slate-600"
           >
-            <h3 className="text-lg font-semibold text-amber-300">{feature.title}</h3>
+            <h3 className="text-lg font-semibold text-white">{feature.title}</h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">{feature.description}</p>
           </article>
         ))}

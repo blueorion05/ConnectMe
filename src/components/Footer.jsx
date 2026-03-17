@@ -6,17 +6,32 @@ import {
   FaYoutube,
 } from 'react-icons/fa6'
 
-const contacts = [
-  { company: 'Klassic Holdings', phone: '+234 801 000 1101' },
-  { company: 'Klassic Energy', phone: '+234 801 000 1102' },
-  { company: 'Klassic Logistics', phone: '+234 801 000 1103' },
-  { company: 'Klassic Retail', phone: '+234 801 000 1104' },
-  { company: 'Klassic Health', phone: '+234 801 000 1105' },
-  { company: 'Klassic Agritech', phone: '+234 801 000 1106' },
-  { company: 'Klassic Foods', phone: '+234 801 000 1107' },
-  { company: 'Klassic Finance', phone: '+234 801 000 1108' },
-  { company: 'Klassic Properties', phone: '+234 801 000 1109' },
-  { company: 'Klassic Manufacturing', phone: '+234 801 000 1110' },
+const contactGroups = [
+  {
+    companies: [
+      'Klassic Solutions Inc',
+      'Westwood Law',
+      'Westwood Development Corp',
+      'EBB Tech Corp.',
+    ],
+    contact: '09499916910 (SMART) | 87229244',
+  },
+  {
+    companies: [
+      'Klassic Marketing Inc',
+      'Luxurious, Finest Fit',
+      'Beauty Alley',
+      'The Green Oasis',
+      'Pest Busters',
+      'Morena',
+      'Grafeio',
+    ],
+    contact: '09190024136 (SMART)',
+  },
+  {
+    companies: ['Brains', 'Millennium', 'Connector', 'Z Corp'],
+    contact: '09755826830 (TM) | 09815409835 (TNT) | 83590648',
+  },
 ]
 
 const socials = [
@@ -29,22 +44,25 @@ const socials = [
 
 function Footer() {
   return (
-    <footer className="fade-up fade-delay-3 border-t border-slate-800/70 py-14">
+    <footer className="border-t border-slate-800/80 py-14">
       <div className="grid gap-10 lg:grid-cols-[2fr_1fr]">
         <div>
           <h2 className="text-2xl font-semibold text-white">Contact Directory</h2>
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-slate-300">
             Support: support@klassicgroup.com | 14 Klassic Avenue, Lagos, Nigeria
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {contacts.map((item) => (
-              <div
-                key={item.company}
-                className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
-              >
-                <p className="text-sm font-medium text-slate-200">{item.company}</p>
-                <p className="text-sm text-amber-300">{item.phone}</p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-1 xl:grid-cols-3">
+            {contactGroups.map((group) => (
+              <div key={group.contact} className="card-panel rounded-lg px-4 py-4">
+                <ul className="space-y-1">
+                  {group.companies.map((company) => (
+                    <li key={company} className="text-sm font-medium text-slate-100">
+                      {company}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 border-t border-slate-700 pt-3 text-sm font-semibold text-slate-200">{group.contact}</p>
               </div>
             ))}
           </div>
@@ -58,7 +76,7 @@ function Footer() {
                 key={label}
                 href={href}
                 aria-label={label}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-200 transition hover:-translate-y-1 hover:border-amber-400 hover:text-amber-300"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-white transition hover:border-slate-500"
               >
                 <Icon />
               </a>
