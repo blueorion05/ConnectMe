@@ -186,7 +186,7 @@ function BookingForm() {
           <Field
             id="preferredSchedule"
             type="datetime-local"
-            label="Preffered Schedule"
+            label="Preferred Schedule"
             value={formData.preferredSchedule}
             min={minDateTime}
             onChange={(e) => updateField('preferredSchedule', e.target.value)}
@@ -237,7 +237,7 @@ function Field({
   min,
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-100">
         {label}
       </label>
@@ -249,7 +249,7 @@ function Field({
 
 function SelectField({ id, label, value, onChange, options, placeholder, error }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-100">
         {label}
       </label>
