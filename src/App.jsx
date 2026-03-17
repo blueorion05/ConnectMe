@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import Navbar from './components/Navbar'
 import HeroSection from './components/HeroSection'
 import BookingForm from './components/BookingForm'
@@ -21,4 +22,4 @@ function App() {
   )
 }
 
-export default App
+export default App;
