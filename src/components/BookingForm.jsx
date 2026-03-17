@@ -161,7 +161,7 @@ function BookingForm() {
             label="Email Address *"
             value={formData.email}
             onChange={(e) => updateField('email', e.target.value)}
-            placeholder="your email address"
+            placeholder="Your email address"
             error={errors.email}
             required
           />
