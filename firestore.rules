@@ -7,16 +7,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return request.auth.token.get('admin', false) == true;
+    function hasAdminRole() {
+      return request.auth != null && request.auth.token.get('role') == 'admin';
     }
 
-    // Bookings collection: allow public read and write (for booking form submissions)
+    // Bookings collection: allow public submissions and reads
     match /bookings/{bookingId} {
-      // Anyone can read their own booking if they have the ID
+      // Anyone can read bookings
       allow read: if true;
       
-      // Anyone can create a new booking
+      // Anyone can create a new booking with validation
       allow create: if request.resource.data.size() > 0 &&
                         request.resource.data.keys().hasAll(['name', 'email', 'phone']) &&
                         request.resource.data.name is string &&
@@ -24,17 +24,17 @@ service cloud.firestore {
                         request.resource.data.phone is string &&
                         request.resource.data.email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
       
-      // Only authenticated admins or users with explicit permissions can update/delete
-      allow update, delete: if isAuthenticated() && isAdmin();
+      // Only admins can update/delete bookings
+      allow update, delete: if hasAdminRole();
     }
 
-    // App configuration/settings: restricted to authenticated users
+    // App configuration/settings: public reads, admin writes
     match /appConfig/{document=**} {
-      // Allow admins to read and write app settings
-      allow read, write: if isAuthenticated() && isAdmin();
+      // Anyone can read app settings
+      allow read: if true;
       
-      // Allow anyone to read public settings (optional - remove if settings should be private)
-      allow read: if request.query.limit <= 1;
+      // Only admins can write/update settings
+      allow write: if hasAdminRole();
     }
 
     // Default deny for any other collections
